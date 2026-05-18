@@ -1,0 +1,251 @@
+"""Static reference data used across the application."""
+
+# Per-PA rate stats from a recent league-average season
+LEAGUE_AVG = {
+    "H_per_PA": 0.238,
+    "TB_per_PA": 0.390,
+    "HR_per_PA": 0.034,
+}
+
+# Expected plate appearances per lineup slot (9-inning game average)
+LINEUP_SLOT_PA = {
+    1: 4.7,
+    2: 4.6,
+    3: 4.5,
+    4: 4.4,
+    5: 4.3,
+    6: 4.2,
+    7: 4.1,
+    8: 3.9,
+    9: 3.8,
+}
+
+# MLB venue data keyed by MLB Stats API venue ID.
+# outfield_orientation_degrees: compass bearing from home plate toward center field.
+STADIUM_COORDS = {
+    1: {
+        "name": "Angel Stadium",
+        "team": "Los Angeles Angels",
+        "lat": 33.8003,
+        "lon": -117.8827,
+        "outfield_orientation_degrees": 25,
+    },
+    2: {
+        "name": "Oriole Park at Camden Yards",
+        "team": "Baltimore Orioles",
+        "lat": 39.2838,
+        "lon": -76.6218,
+        "outfield_orientation_degrees": 55,
+    },
+    3: {
+        "name": "Fenway Park",
+        "team": "Boston Red Sox",
+        "lat": 42.3467,
+        "lon": -71.0972,
+        "outfield_orientation_degrees": 58,
+    },
+    5: {
+        "name": "Progressive Field",
+        "team": "Cleveland Guardians",
+        "lat": 41.4962,
+        "lon": -81.6852,
+        "outfield_orientation_degrees": 12,
+    },
+    7: {
+        "name": "Kauffman Stadium",
+        "team": "Kansas City Royals",
+        "lat": 39.0517,
+        "lon": -94.4803,
+        "outfield_orientation_degrees": 5,
+    },
+    10: {
+        "name": "Oakland Coliseum",
+        "team": "Oakland Athletics",
+        "lat": 37.7516,
+        "lon": -122.2005,
+        "outfield_orientation_degrees": 320,
+    },
+    12: {
+        "name": "Tropicana Field",
+        "team": "Tampa Bay Rays",
+        "lat": 27.7683,
+        "lon": -82.6534,
+        "outfield_orientation_degrees": 60,
+    },
+    14: {
+        "name": "Rogers Centre",
+        "team": "Toronto Blue Jays",
+        "lat": 43.6414,
+        "lon": -79.3894,
+        "outfield_orientation_degrees": 12,
+    },
+    15: {
+        "name": "Chase Field",
+        "team": "Arizona Diamondbacks",
+        "lat": 33.4455,
+        "lon": -112.0667,
+        "outfield_orientation_degrees": 340,
+    },
+    17: {
+        "name": "Wrigley Field",
+        "team": "Chicago Cubs",
+        "lat": 41.9484,
+        "lon": -87.6553,
+        "outfield_orientation_degrees": 95,
+    },
+    18: {
+        "name": "Guaranteed Rate Field",
+        "team": "Chicago White Sox",
+        "lat": 41.8299,
+        "lon": -87.6338,
+        "outfield_orientation_degrees": 5,
+    },
+    19: {
+        "name": "Coors Field",
+        "team": "Colorado Rockies",
+        "lat": 39.7559,
+        "lon": -104.9942,
+        "outfield_orientation_degrees": 340,
+    },
+    22: {
+        "name": "Dodger Stadium",
+        "team": "Los Angeles Dodgers",
+        "lat": 34.0739,
+        "lon": -118.2400,
+        "outfield_orientation_degrees": 25,
+    },
+    31: {
+        "name": "PNC Park",
+        "team": "Pittsburgh Pirates",
+        "lat": 40.4469,
+        "lon": -80.0057,
+        "outfield_orientation_degrees": 340,
+    },
+    32: {
+        "name": "American Family Field",
+        "team": "Milwaukee Brewers",
+        "lat": 43.0280,
+        "lon": -87.9712,
+        "outfield_orientation_degrees": 5,
+    },
+    2392: {
+        "name": "Minute Maid Park",
+        "team": "Houston Astros",
+        "lat": 29.7572,
+        "lon": -95.3553,
+        "outfield_orientation_degrees": 35,
+    },
+    2394: {
+        "name": "Comerica Park",
+        "team": "Detroit Tigers",
+        "lat": 42.3390,
+        "lon": -83.0485,
+        "outfield_orientation_degrees": 348,
+    },
+    2395: {
+        "name": "Oracle Park",
+        "team": "San Francisco Giants",
+        "lat": 37.7786,
+        "lon": -122.3893,
+        "outfield_orientation_degrees": 60,
+    },
+    2602: {
+        "name": "Great American Ball Park",
+        "team": "Cincinnati Reds",
+        "lat": 39.0976,
+        "lon": -84.5072,
+        "outfield_orientation_degrees": 352,
+    },
+    2680: {
+        "name": "Petco Park",
+        "team": "San Diego Padres",
+        "lat": 32.7073,
+        "lon": -117.1566,
+        "outfield_orientation_degrees": 310,
+    },
+    2681: {
+        "name": "Citizens Bank Park",
+        "team": "Philadelphia Phillies",
+        "lat": 39.9061,
+        "lon": -75.1665,
+        "outfield_orientation_degrees": 60,
+    },
+    2889: {
+        "name": "Busch Stadium",
+        "team": "St. Louis Cardinals",
+        "lat": 38.6226,
+        "lon": -90.1928,
+        "outfield_orientation_degrees": 10,
+    },
+    3289: {
+        "name": "Citi Field",
+        "team": "New York Mets",
+        "lat": 40.7571,
+        "lon": -73.8458,
+        "outfield_orientation_degrees": 355,
+    },
+    3309: {
+        "name": "Nationals Park",
+        "team": "Washington Nationals",
+        "lat": 38.8730,
+        "lon": -77.0074,
+        "outfield_orientation_degrees": 348,
+    },
+    3312: {
+        "name": "Target Field",
+        "team": "Minnesota Twins",
+        "lat": 44.9817,
+        "lon": -93.2781,
+        "outfield_orientation_degrees": 340,
+    },
+    3313: {
+        "name": "Yankee Stadium",
+        "team": "New York Yankees",
+        "lat": 40.8296,
+        "lon": -73.9262,
+        "outfield_orientation_degrees": 60,
+    },
+    4169: {
+        "name": "loanDepot park",
+        "team": "Miami Marlins",
+        "lat": 25.7781,
+        "lon": -80.2197,
+        "outfield_orientation_degrees": 355,
+    },
+    4705: {
+        "name": "Truist Park",
+        "team": "Atlanta Braves",
+        "lat": 33.8908,
+        "lon": -84.4678,
+        "outfield_orientation_degrees": 25,
+    },
+    5325: {
+        "name": "Globe Life Field",
+        "team": "Texas Rangers",
+        "lat": 32.7473,
+        "lon": -97.0824,
+        "outfield_orientation_degrees": 20,
+    },
+    5000: {
+        "name": "Sutter Health Park",
+        "team": "Oakland Athletics",
+        "lat": 38.5803,
+        "lon": -121.5085,
+        "outfield_orientation_degrees": 45,
+    },
+    680: {
+        "name": "T-Mobile Park",
+        "team": "Seattle Mariners",
+        "lat": 47.5914,
+        "lon": -122.3325,
+        "outfield_orientation_degrees": 12,
+    },
+}
+
+# Pitcher fatigue modeling parameters
+FATIGUE_THRESHOLDS = {
+    "rest_days_threshold": 4,
+    "pitch_count_threshold": 95,
+    "rest_penalty": 1.06,
+    "pitch_penalty": 1.08,
+}
