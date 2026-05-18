@@ -10,7 +10,7 @@ def render_game_card(game: dict) -> None:
     selector when multiple games are listed on the sidebar.
 
     Args:
-        game: Game dict as returned by fetcher.get_todays_games().
+        game: Game dict as returned by fetcher.get_today_schedule().
     """
     pass
 

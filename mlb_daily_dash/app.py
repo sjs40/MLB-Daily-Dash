@@ -32,15 +32,13 @@ def _format_game_time(game_date_utc: str) -> str:
     """Convert an ISO-8601 UTC timestamp to a short Eastern-time string."""
     try:
         dt = datetime.datetime.fromisoformat(game_date_utc.replace("Z", "+00:00"))
-        return dt.astimezone(_EDT).strftime("%-I:%M %p ET")
-    except (ValueError, AttributeError, TypeError):
+        et = dt.astimezone(_EDT)
         try:
-            # Windows fallback — %-I is not supported
-            dt = datetime.datetime.fromisoformat(game_date_utc.replace("Z", "+00:00"))
-            s = dt.astimezone(_EDT).strftime("%I:%M %p ET")
-            return s.lstrip("0")
-        except Exception:
-            return "TBD"
+            return et.strftime("%-I:%M %p ET")   # Linux/macOS
+        except ValueError:
+            return et.strftime("%I:%M %p ET").lstrip("0")  # Windows
+    except Exception:
+        return "TBD"
 
 
 def _split_param(label: str) -> str:
@@ -210,7 +208,8 @@ def main() -> None:
 
     st.divider()
 
-    games = get_today_schedule()
+    with st.spinner("Loading today's schedule…"):
+        games = get_today_schedule()
 
     if not games:
         st.info("No games scheduled today.")
