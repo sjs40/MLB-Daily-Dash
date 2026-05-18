@@ -1,30 +1,95 @@
-"""Streamlit component that renders a starting pitcher's profile card."""
+"""Streamlit component that renders a starting pitcher profile card."""
 
 import streamlit as st
 
 
-def render_pitcher_card(pitcher: dict, recent_stats: object, season_stats: dict) -> None:
-    """Render a pitcher profile card with season stats, recent form, and fatigue indicator.
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    Shows ERA, FIP, K/9, BB/9, WHIP, a sparkline of recent starts, and a
-    colour-coded fatigue badge based on days of rest and last start pitch count.
+def _oba(split: dict) -> float:
+    """Opponent batting average (hits allowed / batters faced)."""
+    pa = split.get("pa") or 0
+    return split.get("hits", 0) / pa if pa else 0.0
+
+
+def _warn(col, message: str) -> None:
+    """Append a small red warning line beneath a metric tile."""
+    col.markdown(f":red[⚠ {message}]")
+
+
+def _split_metrics(col, label: str, split: dict) -> None:
+    """Render OBA / HR / TB tiles inside a column for one handedness split."""
+    col.markdown(f"**{label}**")
+    pa = split.get("pa") or 0
+    oba = _oba(split)
+    hr  = split.get("hr", 0)
+    tb  = split.get("tb", 0)
+
+    m1, m2, m3 = col.columns(3)
+    m1.metric("OBA",        f"{oba:.3f}")
+    m2.metric("HR allowed", str(hr))
+    m3.metric("TB allowed", str(tb))
+
+    if pa:
+        col.caption(f"({pa} BF)")
+
+
+# ---------------------------------------------------------------------------
+# Public component
+# ---------------------------------------------------------------------------
+
+def render_pitcher_card(
+    pitcher: dict,
+    splits: dict,
+    workload: dict,
+    split_window: str,
+) -> None:
+    """Render a pitcher profile card with workload flags and platoon splits.
 
     Args:
-        pitcher: Pitcher info dict (name, player_id, handedness, headshot_url).
-        recent_stats: DataFrame of recent starts from fetcher.get_pitcher_recent_stats().
-        season_stats: Dict of season aggregates from fetcher.get_pitcher_season_stats().
+        pitcher: Pitcher dict with at minimum "name" and "hand" keys.
+        splits: Full splits dict {"vsLeft": {...}, "vsRight": {...}} from
+            get_pitcher_splits(). Pass an empty dict when unavailable.
+        workload: Dict from get_pitcher_workload() with days_rest,
+            last_pitch_count, last_3_ip. Pass an empty dict when unavailable.
+        split_window: "season" or "rolling30" — shown as a caption label.
     """
-    pass
+    if not pitcher or not splits:
+        st.info("Probable pitcher TBD.")
+        return
 
+    name: str = pitcher.get("name") or "Unknown"
+    hand: str = pitcher.get("hand") or "R"
+    hand_label = "LHP" if hand == "L" else "RHP"
 
-def render_fatigue_badge(days_rest: int, last_pitch_count: int) -> None:
-    """Render a colour-coded badge reflecting pitcher fatigue level.
+    st.subheader(f"{name} · {hand_label}")
 
-    Green = well-rested & low count, yellow = moderate concern,
-    red = fatigue flag triggered by thresholds in FATIGUE_THRESHOLDS.
+    # ── Workload row ─────────────────────────────────────────────────────────
+    days_rest:    int   = workload.get("days_rest", 0)
+    pitch_count:  int   = workload.get("last_pitch_count", 0)
+    last_3_ip:    float = workload.get("last_3_ip", 0.0)
 
-    Args:
-        days_rest: Number of full days since the pitcher's last outing.
-        last_pitch_count: Pitch count in the pitcher's most recent start.
-    """
-    pass
+    wc1, wc2, wc3 = st.columns(3)
+
+    wc1.metric("Rest", f"{days_rest} day{'s' if days_rest != 1 else ''}")
+    if days_rest < 4:
+        _warn(wc1, "Short rest")
+
+    wc2.metric("Last start", f"{pitch_count} pitches")
+    if pitch_count > 95:
+        _warn(wc2, "High pitch count")
+
+    wc3.metric("L3 starts", f"{last_3_ip:.1f} IP")
+
+    # ── Platoon splits ───────────────────────────────────────────────────────
+    st.divider()
+
+    vs_l = splits.get("vsLeft")  or {}
+    vs_r = splits.get("vsRight") or {}
+
+    sc1, sc2 = st.columns(2)
+    _split_metrics(sc1, "vs LHB", vs_l)
+    _split_metrics(sc2, "vs RHB", vs_r)
+
+    st.caption(f"Split window: {split_window}")
