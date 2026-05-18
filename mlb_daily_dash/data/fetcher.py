@@ -1,136 +1,353 @@
-"""Functions for fetching MLB game, player, and environmental data."""
+"""Functions for fetching MLB data from the free MLB Stats API (statsapi.mlb.com)."""
 
 import datetime
-from typing import Optional
 
-import pandas as pd
 import requests
+import streamlit as st
+
+BASE_URL = "https://statsapi.mlb.com"
+_TIMEOUT = 10
 
 
-def get_todays_games(date: Optional[datetime.date] = None) -> list[dict]:
-    """Fetch the schedule of MLB games for a given date.
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
-    Args:
-        date: The date to fetch games for. Defaults to today.
+def _get(path: str, params: dict | None = None) -> dict:
+    """GET from the MLB Stats API and return parsed JSON."""
+    resp = requests.get(f"{BASE_URL}{path}", params=params, timeout=_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _ip_to_float(ip_str: str) -> float:
+    """Convert baseball innings-pitched notation to a real decimal.
+
+    "6.1" → 6.333 (6 full innings + 1 out = 1/3 of an inning).
+    """
+    try:
+        whole, frac = str(ip_str).split(".")
+        return int(whole) + int(frac) / 3
+    except (ValueError, AttributeError):
+        try:
+            return float(ip_str)
+        except (ValueError, TypeError):
+            return 0.0
+
+
+def _parse_pitcher(node: dict | None) -> dict:
+    """Extract id, name, and throwing hand from a probablePitcher node."""
+    if not node:
+        return {"id": None, "name": None, "hand": None}
+    return {
+        "id": node.get("id"),
+        "name": node.get("fullName"),
+        "hand": (node.get("pitchHand") or {}).get("code"),
+    }
+
+
+def _to_float(value: object) -> float:
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _zero_split() -> dict:
+    return {"pa": 0, "hits": 0, "hr": 0, "tb": 0, "avg": 0.0}
+
+
+def _empty_splits() -> dict:
+    return {"vsLeft": _zero_split(), "vsRight": _zero_split()}
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=3600)
+def get_today_schedule() -> list[dict]:
+    """Fetch today's MLB schedule with probable pitchers and venue details.
 
     Returns:
-        List of game dicts containing gamePk, teams, venue, status, and game time.
+        List of game dicts, each with keys: gamePk, gameDate,
+        venue (id, name), away and home each containing teamId, teamName,
+        abbreviation, and pitcher (id, name, hand). Pitcher fields are None
+        when no probable starter has been announced.
     """
-    pass
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    try:
+        data = _get(
+            "/api/v1/schedule",
+            params={
+                "sportId": 1,
+                "date": today,
+                "hydrate": "probablePitcher,team,venue",
+            },
+        )
+    except Exception:
+        return []
+
+    games: list[dict] = []
+    for date_block in data.get("dates", []):
+        for g in date_block.get("games", []):
+            teams = g.get("teams", {})
+            away_raw = teams.get("away", {})
+            home_raw = teams.get("home", {})
+            games.append({
+                "gamePk": g.get("gamePk"),
+                "gameDate": g.get("gameDate"),
+                "venue": {
+                    "id": (g.get("venue") or {}).get("id"),
+                    "name": (g.get("venue") or {}).get("name"),
+                },
+                "away": {
+                    "teamId": (away_raw.get("team") or {}).get("id"),
+                    "teamName": (away_raw.get("team") or {}).get("name"),
+                    "abbreviation": (away_raw.get("team") or {}).get("abbreviation"),
+                    "pitcher": _parse_pitcher(away_raw.get("probablePitcher")),
+                },
+                "home": {
+                    "teamId": (home_raw.get("team") or {}).get("id"),
+                    "teamName": (home_raw.get("team") or {}).get("name"),
+                    "abbreviation": (home_raw.get("team") or {}).get("abbreviation"),
+                    "pitcher": _parse_pitcher(home_raw.get("probablePitcher")),
+                },
+            })
+    return games
 
 
-def get_probable_pitchers(game_pk: int) -> dict:
-    """Fetch the probable starting pitchers for a game.
+@st.cache_data(ttl=3600)
+def get_team_roster(team_id: int) -> list[dict]:
+    """Fetch the active roster for a team, excluding pitchers (position code "1").
 
     Args:
-        game_pk: The MLB Stats API game primary key.
+        team_id: MLB Stats API team ID.
 
     Returns:
-        Dict with 'home' and 'away' keys, each containing pitcher info or None.
+        List of dicts with personId, fullName, position (code, abbreviation).
     """
-    pass
+    try:
+        data = _get(f"/api/v1/teams/{team_id}/roster", params={"rosterType": "active"})
+    except Exception:
+        return []
+
+    players: list[dict] = []
+    for entry in data.get("roster", []):
+        pos = entry.get("position", {})
+        if pos.get("code") == "1":
+            continue
+        players.append({
+            "personId": entry["person"]["id"],
+            "fullName": entry["person"]["fullName"],
+            "position": {
+                "code": pos.get("code"),
+                "abbreviation": pos.get("abbreviation"),
+            },
+        })
+    return players
 
 
-def get_starting_lineup(game_pk: int) -> dict:
-    """Fetch the confirmed starting lineups for a game.
+@st.cache_data(ttl=3600)
+def get_top_batters_by_pa(team_id: int, season: int, n: int = 9) -> list[dict]:
+    """Return the top n non-pitcher roster members ranked by plate appearances.
+
+    Makes one API call per non-pitcher on the active roster; results are cached.
 
     Args:
-        game_pk: The MLB Stats API game primary key.
+        team_id: MLB Stats API team ID.
+        season: Season year.
+        n: Number of batters to return (default 9).
 
     Returns:
-        Dict with 'home' and 'away' keys, each a list of player dicts in batting order.
-        Returns an empty list for a side if the lineup is not yet posted.
+        List of up to n dicts with personId, fullName, position,
+        plateAppearances, avg, hits, homeRuns, totalBases.
     """
-    pass
+    roster = get_team_roster(team_id)
+    if not roster:
+        return []
+
+    batters: list[dict] = []
+    for player in roster:
+        pid = player["personId"]
+        try:
+            data = _get(
+                f"/api/v1/people/{pid}/stats",
+                params={"stats": "season", "group": "hitting", "season": season},
+            )
+        except Exception:
+            continue
+
+        stat_blocks = data.get("stats") or []
+        splits = stat_blocks[0].get("splits", []) if stat_blocks else []
+        if not splits:
+            continue
+
+        s = splits[0].get("stat", {})
+        batters.append({
+            "personId": pid,
+            "fullName": player["fullName"],
+            "position": player["position"],
+            "plateAppearances": s.get("plateAppearances", 0),
+            "avg": s.get("avg", ".000"),
+            "hits": s.get("hits", 0),
+            "homeRuns": s.get("homeRuns", 0),
+            "totalBases": s.get("totalBases", 0),
+        })
+
+    batters.sort(key=lambda b: b["plateAppearances"], reverse=True)
+    return batters[:n]
 
 
-def get_pitcher_recent_stats(player_id: int, n_games: int = 5) -> pd.DataFrame:
-    """Fetch a starting pitcher's stats across their most recent starts.
+def _fetch_splits(player_id: int, season: int, group: str, window: str) -> dict:
+    """Shared logic for batter and pitcher vs-hand splits."""
+    params: dict = {
+        "stats": "statSplits",
+        "group": group,
+        "season": season,
+        "sitCodes": "vl,vr",
+    }
+    if window == "rolling30":
+        today = datetime.date.today()
+        start = today - datetime.timedelta(days=30)
+        params["startDate"] = start.strftime("%m/%d/%Y")
+        params["endDate"] = today.strftime("%m/%d/%Y")
+
+    try:
+        data = _get(f"/api/v1/people/{player_id}/stats", params=params)
+    except Exception:
+        return _empty_splits()
+
+    result = _empty_splits()
+    for stat_block in data.get("stats", []):
+        for split in stat_block.get("splits", []):
+            code = (split.get("split") or {}).get("code", "")
+            s = split.get("stat", {})
+            entry = {
+                "pa": s.get("plateAppearances", 0),
+                "hits": s.get("hits", 0),
+                "hr": s.get("homeRuns", 0),
+                "tb": s.get("totalBases", 0),
+                "avg": _to_float(s.get("avg", ".000")),
+            }
+            if code == "vl":
+                result["vsLeft"] = entry
+            elif code == "vr":
+                result["vsRight"] = entry
+    return result
+
+
+@st.cache_data(ttl=3600)
+def get_batter_splits(player_id: int, season: int, window: str = "season") -> dict:
+    """Return a batter's hitting splits vs left-handed and right-handed pitchers.
 
     Args:
         player_id: MLB Stats API player ID.
-        n_games: Number of most recent games to include.
+        season: Season year.
+        window: "season" for full-season splits, "rolling30" for last 30 days.
 
     Returns:
-        DataFrame with columns: date, opponent, IP, H, ER, BB, K, pitches.
+        Dict with vsLeft and vsRight keys, each containing pa, hits, hr, tb, avg.
     """
-    pass
+    return _fetch_splits(player_id, season, "hitting", window)
 
 
-def get_pitcher_season_stats(player_id: int, season: Optional[int] = None) -> dict:
-    """Fetch a pitcher's season-level stats (ERA, FIP, K/9, BB/9, HR/9, WHIP).
+@st.cache_data(ttl=3600)
+def get_pitcher_splits(player_id: int, season: int, window: str = "season") -> dict:
+    """Return a pitcher's allowed-hit splits vs left-handed and right-handed batters.
 
     Args:
         player_id: MLB Stats API player ID.
-        season: Season year. Defaults to current season.
+        season: Season year.
+        window: "season" for full-season splits, "rolling30" for last 30 days.
 
     Returns:
-        Dict of aggregated season stats.
+        Dict with vsLeft and vsRight keys, each containing pa, hits, hr, tb, avg.
     """
-    pass
+    return _fetch_splits(player_id, season, "pitching", window)
 
 
-def get_batter_season_stats(player_id: int, season: Optional[int] = None) -> dict:
-    """Fetch a batter's season-level stats (AVG, OBP, SLG, wOBA, wRC+).
+@st.cache_data(ttl=3600)
+def get_pitcher_workload(player_id: int, season: int) -> dict:
+    """Return rest days, last pitch count, and rolling IP total for a pitcher.
 
     Args:
         player_id: MLB Stats API player ID.
-        season: Season year. Defaults to current season.
+        season: Season year.
 
     Returns:
-        Dict of aggregated season stats.
+        Dict with days_rest (int), last_pitch_count (int), last_3_ip (float).
+        All values are 0 / 0.0 when no game log entries are found.
     """
-    pass
+    empty: dict = {"days_rest": 0, "last_pitch_count": 0, "last_3_ip": 0.0}
+    try:
+        data = _get(
+            f"/api/v1/people/{player_id}/stats",
+            params={"stats": "gameLog", "group": "pitching", "season": season},
+        )
+    except Exception:
+        return empty
+
+    entries: list[dict] = []
+    for stat_block in data.get("stats", []):
+        for split in stat_block.get("splits", []):
+            raw_date = split.get("date", "")
+            s = split.get("stat", {})
+            try:
+                game_date = datetime.date.fromisoformat(raw_date)
+            except ValueError:
+                continue
+            entries.append({
+                "date": game_date,
+                "pitches": s.get("numberOfPitches", 0),
+                "ip": _ip_to_float(s.get("inningsPitched", "0.0")),
+            })
+
+    if not entries:
+        return empty
+
+    entries.sort(key=lambda e: e["date"])
+    most_recent = entries[-1]
+    last_3_ip = sum(e["ip"] for e in entries[-3:])
+
+    return {
+        "days_rest": (datetime.date.today() - most_recent["date"]).days,
+        "last_pitch_count": most_recent["pitches"],
+        "last_3_ip": round(last_3_ip, 2),
+    }
 
 
-def get_batter_vs_pitcher(batter_id: int, pitcher_id: int) -> dict:
-    """Fetch career head-to-head stats between a batter and pitcher.
+_STATUS_MAP: dict[str, str] = {
+    "10-day il": "IL10",
+    "15-day il": "IL10",
+    "7-day il": "IL10",
+    "60-day il": "IL60",
+    "day-to-day": "DTD",
+}
+
+
+@st.cache_data(ttl=3600)
+def get_injury_report(team_id: int) -> list[dict]:
+    """Fetch the injured list / day-to-day roster for a team.
 
     Args:
-        batter_id: MLB Stats API player ID for the batter.
-        pitcher_id: MLB Stats API player ID for the pitcher.
+        team_id: MLB Stats API team ID.
 
     Returns:
-        Dict with PA, H, HR, BB, K, AVG, OBP, SLG.
+        List of dicts with personId, fullName, and status ("IL10", "IL60", "DTD",
+        or the raw description string when the status is not recognised).
     """
-    pass
+    try:
+        data = _get(f"/api/v1/teams/{team_id}/roster", params={"rosterType": "injuries"})
+    except Exception:
+        return []
 
-
-def get_weather(lat: float, lon: float, game_time_utc: str) -> dict:
-    """Fetch weather forecast for a venue at the time of first pitch.
-
-    Args:
-        lat: Venue latitude.
-        lon: Venue longitude.
-        game_time_utc: ISO-8601 UTC datetime string for first pitch.
-
-    Returns:
-        Dict with temp_f, wind_mph, wind_direction_degrees, condition, humidity_pct.
-    """
-    pass
-
-
-def get_umpire(game_pk: int) -> dict:
-    """Fetch the home plate umpire assignment for a game.
-
-    Args:
-        game_pk: The MLB Stats API game primary key.
-
-    Returns:
-        Dict with umpire name and official_id, or empty dict if not yet assigned.
-    """
-    pass
-
-
-def get_umpire_stats(umpire_name: str) -> dict:
-    """Fetch historical zone-tendency stats for a home plate umpire.
-
-    Uses cached/scraped data; not available via the official MLB API.
-
-    Args:
-        umpire_name: Full name of the umpire.
-
-    Returns:
-        Dict with called_strike_rate, bb_per_game, k_per_game, run_impact_score.
-    """
-    pass
+    injured: list[dict] = []
+    for entry in data.get("roster", []):
+        raw = (entry.get("status") or {}).get("description", "")
+        injured.append({
+            "personId": entry["person"]["id"],
+            "fullName": entry["person"]["fullName"],
+            "status": _STATUS_MAP.get(raw.lower(), raw),
+        })
+    return injured
