@@ -317,6 +317,8 @@ def get_pitcher_workload(player_id: int, season: int) -> dict:
     }
 
 
+_UMP_SCORECARDS_URL = "https://umpscorecards.com/api/umpires/"
+
 _STATUS_MAP: dict[str, str] = {
     "10-day il": "IL10",
     "15-day il": "IL10",
@@ -351,3 +353,78 @@ def get_injury_report(team_id: int) -> list[dict]:
             "status": _STATUS_MAP.get(raw.lower(), raw),
         })
     return injured
+
+
+@st.cache_data(ttl=3600)
+def get_umpire_for_game(game_pk: int) -> dict | None:
+    """Return the home plate umpire for a game from the boxscore officials list.
+
+    Umpire assignments are typically posted a few hours before first pitch;
+    this function returns None rather than raising when they are not yet available.
+
+    Args:
+        game_pk: MLB Stats API game primary key.
+
+    Returns:
+        Dict with name (str) and id (int), or None if not yet assigned.
+    """
+    try:
+        data = _get(f"/api/v1/game/{game_pk}/boxscore")
+    except Exception:
+        return None
+
+    for official in data.get("officials", []):
+        if official.get("officialType") == "Home Plate":
+            person = official.get("official", {})
+            return {
+                "name": person.get("fullName"),
+                "id": person.get("id"),
+            }
+    return None
+
+
+@st.cache_data(ttl=86400)
+def get_umpire_stats(umpire_name: str) -> dict | None:
+    """Fetch career zone-tendency stats for an umpire from UmpScorecards.
+
+    Career aggregates change slowly, so results are cached for 24 hours.
+
+    Args:
+        umpire_name: Full name of the umpire (e.g. "Angel Hernandez").
+
+    Returns:
+        Dict with name, k_pct, bb_pct, k_pct_delta, bb_pct_delta, run_impact,
+        or None when the umpire is not found or the API is unavailable.
+    """
+    if not umpire_name:
+        return None
+
+    try:
+        resp = requests.get(
+            _UMP_SCORECARDS_URL,
+            params={"name": umpire_name},
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception:
+        return None
+
+    # The endpoint returns a list; take the closest name match (first result).
+    if isinstance(payload, list):
+        if not payload:
+            return None
+        record = payload[0]
+    elif isinstance(payload, dict):
+        record = payload
+    else:
+        return None
+
+    return {
+        "name": record.get("name", umpire_name),
+        "k_pct": _to_float(record.get("k_pct")),
+        "bb_pct": _to_float(record.get("bb_pct")),
+        "k_pct_delta": _to_float(record.get("k_pct_delta")),
+        "bb_pct_delta": _to_float(record.get("bb_pct_delta")),
+        "run_impact": _to_float(record.get("run_impact")),
+    }
