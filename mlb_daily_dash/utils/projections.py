@@ -172,10 +172,16 @@ def project_batter(
 
     slot_pa = LINEUP_SLOT_PA.get(lineup_slot, 4.0)
 
+    xH_val   = blended_H  * sup_H  * pf_hits * fatigue * slot_pa
+    xTB_val  = blended_TB * sup_TB * pf_hits * fatigue * slot_pa
+    xHR_val  = blended_HR * sup_HR * pf_hr   * fatigue * slot_pa
+    xTBH_val = max(0.0, xTB_val - xHR_val)
+
     return {
-        "xH": round(blended_H * sup_H * pf_hits * fatigue * slot_pa, 2),
-        "xTB": round(blended_TB * sup_TB * pf_hits * fatigue * slot_pa, 2),
-        "xHR": round(blended_HR * sup_HR * pf_hr * fatigue * slot_pa, 2),
+        "xH":   round(xH_val,   2),
+        "xTB":  round(xTB_val,  2),
+        "xHR":  round(xHR_val,  2),
+        "xTBH": round(xTBH_val, 2),
     }
 
 
@@ -212,7 +218,7 @@ def project_team(
     Returns:
         Dict with team-total xH, xTB, xHR rounded to 2 decimal places.
     """
-    totals: dict[str, float] = {"xH": 0.0, "xTB": 0.0, "xHR": 0.0}
+    totals: dict[str, float] = {"xH": 0.0, "xTB": 0.0, "xHR": 0.0, "xTBH": 0.0}
 
     for batter in batters:
         if batter.get("on_il"):

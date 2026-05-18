@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(curl -s \"https://umpscorecards.com/api/umpires/?name=Angel+Hernandez\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d[0] if isinstance\\(d,list\\) else d, indent=2\\)\\)\")",
+      "Bash(curl -s \"https://umpscorecards.com/api/umpires/\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(type\\(d\\).__name__, len\\(d\\) if isinstance\\(d,list\\) else ''\\); r=d[0] if isinstance\\(d,list\\) else d; print\\(list\\(r.keys\\(\\)\\)\\)\")",
+      "Bash(curl -s --max-time 10 \"https://umpscorecards.com/api/umpires/\" -o /tmp/ump.json)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/tmp/ump.json'\\)\\); r=d[0] if isinstance\\(d,list\\) else d; print\\(list\\(r.keys\\(\\)\\)\\); print\\(json.dumps\\(r, indent=2\\)\\)\")",
+      "Bash(python3 -c \" import requests, json try: r = requests.get\\('https://umpscorecards.com/api/umpires/', timeout=10\\) print\\('status:', r.status_code\\) d = r.json\\(\\) item = d[0] if isinstance\\(d, list\\) else d print\\('keys:', list\\(item.keys\\(\\)\\)\\) print\\(json.dumps\\(item, indent=2\\)\\) except Exception as e: print\\('error:', e\\) \")"
     ]
   }
 }

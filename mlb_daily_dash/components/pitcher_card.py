@@ -7,32 +7,28 @@ import streamlit as st
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _oba(split: dict) -> float:
-    """Opponent batting average (hits allowed / batters faced)."""
-    pa = split.get("pa") or 0
-    return split.get("hits", 0) / pa if pa else 0.0
-
-
 def _warn(col, message: str) -> None:
     """Append a small red warning line beneath a metric tile."""
     col.markdown(f":red[⚠ {message}]")
 
 
 def _split_metrics(col, label: str, split: dict) -> None:
-    """Render OBA / HR / TB tiles inside a column for one handedness split."""
+    """Render wOBA / HR / TB tiles inside a column for one handedness split."""
     col.markdown(f"**{label}**")
-    pa = split.get("pa") or 0
-    oba = _oba(split)
-    hr  = split.get("hr", 0)
-    tb  = split.get("tb", 0)
+    pa    = split.get("pa") or 0
+    woba  = split.get("woba", 0.0)
+    hr    = split.get("hr", 0)
+    tb    = split.get("tb", 0)
+    games = split.get("games", 0)
 
     m1, m2, m3 = col.columns(3)
-    m1.metric("OBA",        f"{oba:.3f}")
+    m1.metric("wOBA",       f"{woba:.3f}")
     m2.metric("HR allowed", str(hr))
     m3.metric("TB allowed", str(tb))
 
     if pa:
-        col.caption(f"({pa} BF)")
+        g_label = f", {games} G" if games else ""
+        col.caption(f"({pa} BF{g_label})")
 
 
 # ---------------------------------------------------------------------------

@@ -65,8 +65,12 @@ def _platoon_label(home_batters: list[dict], away_pitcher: dict) -> str:
     pitcher_hand = (away_pitcher or {}).get("hand")
     if not pitcher_hand:
         return "Platoon: **TBD**"
-    # batter_hand defaults to 'R'; approximate until batter hand API call added
-    count = sum(1 for b in home_batters if b.get("batter_hand", "R") != pitcher_hand)
+    count = 0
+    for b in home_batters:
+        raw = b.get("batter_hand", "R")
+        eff = ("L" if pitcher_hand == "R" else "R") if raw == "S" else raw
+        if eff != pitcher_hand:
+            count += 1
     label = f"Platoon adv **{count}/9** vs {pitcher_hand}HP"
     if count >= 6:
         return f":green[{label}]"

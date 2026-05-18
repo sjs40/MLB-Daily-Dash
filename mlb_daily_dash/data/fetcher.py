@@ -54,7 +54,7 @@ def _to_float(value: object) -> float:
 
 
 def _zero_split() -> dict:
-    return {"pa": 0, "hits": 0, "hr": 0, "tb": 0, "avg": 0.0}
+    return {"pa": 0, "hits": 0, "hr": 0, "tb": 0, "avg": 0.0, "woba": 0.0, "games": 0}
 
 
 def _empty_splits() -> dict:
@@ -128,7 +128,10 @@ def get_team_roster(team_id: int) -> list[dict]:
         List of dicts with personId, fullName, position (code, abbreviation).
     """
     try:
-        data = _get(f"/api/v1/teams/{team_id}/roster", params={"rosterType": "active"})
+        data = _get(
+            f"/api/v1/teams/{team_id}/roster",
+            params={"rosterType": "active", "hydrate": "person"},
+        )
     except Exception:
         return []
 
@@ -137,13 +140,15 @@ def get_team_roster(team_id: int) -> list[dict]:
         pos = entry.get("position", {})
         if pos.get("code") == "1":
             continue
+        person = entry.get("person", {})
         players.append({
-            "personId": entry["person"]["id"],
-            "fullName": entry["person"]["fullName"],
+            "personId": person.get("id"),
+            "fullName": person.get("fullName"),
             "position": {
                 "code": pos.get("code"),
                 "abbreviation": pos.get("abbreviation"),
             },
+            "batter_hand": (person.get("batSide") or {}).get("code", "R"),
         })
     return players
 
@@ -188,6 +193,7 @@ def get_top_batters_by_pa(team_id: int, season: int, n: int = 9) -> list[dict]:
             "personId": pid,
             "fullName": player["fullName"],
             "position": player["position"],
+            "batter_hand": player.get("batter_hand", "R"),
             "plateAppearances": s.get("plateAppearances", 0),
             "avg": s.get("avg", ".000"),
             "hits": s.get("hits", 0),
@@ -229,6 +235,8 @@ def _fetch_splits(player_id: int, season: int, group: str, window: str) -> dict:
                 "hr": s.get("homeRuns", 0),
                 "tb": s.get("totalBases", 0),
                 "avg": _to_float(s.get("avg", ".000")),
+                "woba": _to_float(s.get("woba", 0.0)),
+                "games": s.get("gamesPlayed", 0),
             }
             if code == "vl":
                 result["vsLeft"] = entry
@@ -385,46 +393,49 @@ def get_umpire_for_game(game_pk: int) -> dict | None:
 
 @st.cache_data(ttl=86400)
 def get_umpire_stats(umpire_name: str) -> dict | None:
-    """Fetch career zone-tendency stats for an umpire from UmpScorecards.
+    """Fetch career accuracy/zone stats for an umpire from UmpScorecards.
 
+    The endpoint returns all umpires; we filter client-side by name.
     Career aggregates change slowly, so results are cached for 24 hours.
 
     Args:
         umpire_name: Full name of the umpire (e.g. "Angel Hernandez").
 
     Returns:
-        Dict with name, k_pct, bb_pct, k_pct_delta, bb_pct_delta, run_impact,
-        or None when the umpire is not found or the API is unavailable.
+        Dict with name, games, accuracy, accuracy_above_x, consistency,
+        run_impact — or None when the umpire is not found or the API is
+        unavailable.
     """
     if not umpire_name:
         return None
 
     try:
-        resp = requests.get(
-            _UMP_SCORECARDS_URL,
-            params={"name": umpire_name},
-            timeout=_TIMEOUT,
-        )
+        resp = requests.get(_UMP_SCORECARDS_URL, timeout=_TIMEOUT)
         resp.raise_for_status()
         payload = resp.json()
     except Exception:
         return None
 
-    # The endpoint returns a list; take the closest name match (first result).
-    if isinstance(payload, list):
-        if not payload:
-            return None
-        record = payload[0]
-    elif isinstance(payload, dict):
-        record = payload
-    else:
+    rows: list[dict] = (
+        payload.get("rows", []) if isinstance(payload, dict)
+        else payload if isinstance(payload, list)
+        else []
+    )
+    if not rows:
+        return None
+
+    name_lower = umpire_name.lower()
+    record = next((r for r in rows if r.get("umpire", "").lower() == name_lower), None)
+    if record is None:
+        record = next((r for r in rows if name_lower in r.get("umpire", "").lower()), None)
+    if record is None:
         return None
 
     return {
-        "name": record.get("name", umpire_name),
-        "k_pct": _to_float(record.get("k_pct")),
-        "bb_pct": _to_float(record.get("bb_pct")),
-        "k_pct_delta": _to_float(record.get("k_pct_delta")),
-        "bb_pct_delta": _to_float(record.get("bb_pct_delta")),
-        "run_impact": _to_float(record.get("run_impact")),
+        "name": record.get("umpire", umpire_name),
+        "games": int(record.get("n", 0)),
+        "accuracy": _to_float(record.get("overall_accuracy_wmean", 0.0)),
+        "accuracy_above_x": _to_float(record.get("accuracy_above_x_wmean", 0.0)),
+        "consistency": _to_float(record.get("consistency_wmean", 0.0)),
+        "run_impact": _to_float(record.get("total_run_impact_mean", 0.0)),
     }

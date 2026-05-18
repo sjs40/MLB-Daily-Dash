@@ -12,10 +12,13 @@ from mlb_daily_dash.data.fetcher import get_umpire_for_game, get_umpire_stats
 def render_umpire(game_pk: int) -> None:
     """Render the HP umpire section for a game.
 
-    Fetches the umpire assignment and career zone stats, then renders:
-      - Four st.metric tiles: K%, K% Δ, BB%, BB% Δ
-      - Run impact caption
-      - Falls back gracefully when assignment or stats are unavailable.
+    Fetches the umpire assignment and career zone stats from UmpScorecards,
+    then renders four st.metric tiles: Games, Accuracy %, vs Expected %,
+    Consistency %. Falls back gracefully when assignment or stats are
+    unavailable.
+
+    The UmpScorecards API provides accuracy/consistency metrics rather than
+    K%/BB% directly. Zone classification is derived from accuracy vs model.
 
     Args:
         game_pk: MLB Stats API game primary key.
@@ -35,71 +38,43 @@ def render_umpire(game_pk: int) -> None:
         st.write(f"No career stats found for {name}.")
         return
 
-    k_pct: float       = stats.get("k_pct", 0.0)
-    k_pct_delta: float = stats.get("k_pct_delta", 0.0)
-    bb_pct: float      = stats.get("bb_pct", 0.0)
-    bb_pct_delta: float = stats.get("bb_pct_delta", 0.0)
+    games: int         = stats.get("games", 0)
+    accuracy: float    = stats.get("accuracy", 0.0)
+    acc_above_x: float = stats.get("accuracy_above_x", 0.0)
+    consistency: float = stats.get("consistency", 0.0)
     run_impact: float  = stats.get("run_impact", 0.0)
 
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric(
-        label="K% (career)",
-        value=f"{k_pct:.1%}",
-    )
-    # Fewer Ks than average is hitter-friendly → inverse coloring so
-    # negative delta renders green.
-    col2.metric(
-        label="K% vs Avg",
-        value=f"{k_pct_delta:+.1%}",
-        delta=k_pct_delta,
-        delta_color="inverse",
-    )
-
+    col1.metric("Games (career)", str(games))
+    col2.metric("Accuracy", f"{accuracy:.1f}%")
     col3.metric(
-        label="BB% (career)",
-        value=f"{bb_pct:.1%}",
-    )
-    # More BBs than average is hitter-friendly → standard coloring so
-    # positive delta renders green.
-    col4.metric(
-        label="BB% vs Avg",
-        value=f"{bb_pct_delta:+.1%}",
-        delta=bb_pct_delta,
+        label="vs Expected",
+        value=f"{acc_above_x:+.2f}%",
+        delta=acc_above_x,
         delta_color="normal",
     )
+    col4.metric("Consistency", f"{consistency:.1f}%")
 
-    _render_run_impact_caption(run_impact)
+    zone = _classify_zone(acc_above_x)
+    st.caption(
+        f"Avg run impact: {run_impact:.2f} runs/game · **{zone}**"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _render_run_impact_caption(run_impact: float) -> None:
-    """Render the run-impact line as a caption with a zone label."""
-    zone = _classify_run_impact(run_impact)
-    sign = "+" if run_impact >= 0 else ""
-    st.caption(
-        f"Run impact: {sign}{run_impact:.2f} runs/game vs average "
-        f"— **{zone}**"
-    )
+def _classify_zone(acc_above_x: float) -> str:
+    """Classify umpire tendency based on accuracy relative to model expectation.
 
-
-def _classify_run_impact(run_impact: float) -> str:
-    """Map a run-impact score to a zone label.
-
-    Positive run_impact means more runs than expected (hitter-friendly umpire);
-    negative means fewer runs (pitcher-friendly umpire).
-
-    Args:
-        run_impact: Runs per game above league-average expectation.
-
-    Returns:
-        "Hitter-friendly", "Neutral", or "Pitcher-friendly".
+    Positive acc_above_x → ump calls more correct pitches than expected →
+    tighter/correct zone → slight pitcher-friendly tendency.
+    Negative → fewer correct calls → expanded effective zone → hitter-friendly.
     """
-    if run_impact >= 0.15:
-        return "Hitter-friendly"
-    if run_impact <= -0.15:
+    if acc_above_x >= 0.5:
         return "Pitcher-friendly"
+    if acc_above_x <= -0.5:
+        return "Hitter-friendly"
     return "Neutral"
