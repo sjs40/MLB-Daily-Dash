@@ -13,16 +13,16 @@ def _warn(col, message: str) -> None:
 
 
 def _split_metrics(col, label: str, split: dict) -> None:
-    """Render wOBA / HR / TB tiles inside a column for one handedness split."""
+    """Render OPS / HR / TB tiles inside a column for one handedness split."""
     col.markdown(f"**{label}**")
     pa    = split.get("pa") or 0
-    woba  = split.get("woba", 0.0)
+    ops   = split.get("ops", 0.0)
     hr    = split.get("hr", 0)
     tb    = split.get("tb", 0)
     games = split.get("games", 0)
 
     m1, m2, m3 = col.columns(3)
-    m1.metric("wOBA",       f"{woba:.3f}")
+    m1.metric("OPS",        f"{ops:.3f}")
     m2.metric("HR allowed", str(hr))
     m3.metric("TB allowed", str(tb))
 
@@ -73,8 +73,6 @@ def render_pitcher_card(
         _warn(wc1, "Short rest")
 
     wc2.metric("Last start", f"{pitch_count} pitches")
-    if pitch_count > 95:
-        _warn(wc2, "High pitch count")
 
     wc3.metric("L3 starts", f"{last_3_ip:.1f} IP")
 

@@ -70,7 +70,7 @@ def render_lineup_table(
 ) -> None:
     """Render a styled lineup table with game projections for one team.
 
-    Split stats (AVG, HR, TB, TB-HR, G) displayed are the batter's splits
+    Split stats (AVG, HR, TB) displayed are the batter's splits
     vs the opposing pitcher's handedness — not full-season totals.
 
     Args:
@@ -102,7 +102,6 @@ def render_lineup_table(
     for slot, batter in enumerate(batters, start=1):
         status = _il_status(batter, il_by_id, il_by_name)
         display_name = _name_with_dot(batter.get("fullName", "Unknown"), status)
-        pos = (batter.get("position") or {}).get("abbreviation", "")
 
         splits = batter.get("splits") or {}
         batter_split = splits.get("vsLeft" if pitcher_hand == "L" else "vsRight") or {}
@@ -110,11 +109,9 @@ def render_lineup_table(
         raw_hand = batter.get("batter_hand", "R")
         eff_hand = _effective_hand(raw_hand, pitcher_hand)
 
-        split_avg   = _safe_float(batter_split.get("avg", 0))
-        split_hr    = int(batter_split.get("hr") or 0)
-        split_tb    = int(batter_split.get("tb") or 0)
-        split_tb_hr = max(0, split_tb - split_hr)
-        split_games = int(batter_split.get("games") or 0)
+        split_avg = _safe_float(batter_split.get("avg", 0))
+        split_hr  = int(batter_split.get("hr") or 0)
+        split_tb  = int(batter_split.get("tb") or 0)
 
         if status in _HARD_IL:
             xh = xtb = xhr = xtbh = float("nan")
@@ -145,13 +142,10 @@ def render_lineup_table(
         rows.append({
             "#":      slot,
             "Player": display_name,
-            "Pos":    pos,
             "Hand":   eff_hand,
             "AVG":    split_avg,
             "HR":     split_hr,
             "TB":     split_tb,
-            "TB-HR":  split_tb_hr,
-            "G":      split_games,
             "xH":     xh,
             "xTB":    xtb,
             "xHR":    xhr,
@@ -182,14 +176,11 @@ def render_lineup_table(
     st.dataframe(
         styled,
         column_config={
-            "#":      st.column_config.NumberColumn(width="small"),
+            "#":      st.column_config.NumberColumn(width=40),
             "Player": st.column_config.TextColumn(width="medium"),
-            "Pos":    st.column_config.TextColumn(width="small"),
             "Hand":   st.column_config.TextColumn(width="small"),
             "HR":     st.column_config.NumberColumn(width="small"),
             "TB":     st.column_config.NumberColumn(width="small"),
-            "TB-HR":  st.column_config.NumberColumn(width="small"),
-            "G":      st.column_config.NumberColumn(width="small"),
         },
         use_container_width=True,
         hide_index=True,

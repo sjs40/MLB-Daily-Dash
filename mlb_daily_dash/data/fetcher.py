@@ -54,7 +54,7 @@ def _to_float(value: object) -> float:
 
 
 def _zero_split() -> dict:
-    return {"pa": 0, "hits": 0, "hr": 0, "tb": 0, "avg": 0.0, "woba": 0.0, "games": 0}
+    return {"pa": 0, "hits": 0, "hr": 0, "tb": 0, "avg": 0.0, "ops": 0.0, "games": 0}
 
 
 def _empty_splits() -> dict:
@@ -206,18 +206,18 @@ def get_top_batters_by_pa(team_id: int, season: int, n: int = 9) -> list[dict]:
 
 
 def _fetch_splits(player_id: int, season: int, group: str, window: str) -> dict:
-    """Shared logic for batter and pitcher vs-hand splits."""
+    """Shared logic for batter and pitcher vs-hand splits.
+
+    Note: the MLB Stats API ignores startDate/endDate for statSplits, so
+    splits are always full-season regardless of the window parameter.
+    Hitting splits use plateAppearances; pitching splits use battersFaced.
+    """
     params: dict = {
         "stats": "statSplits",
         "group": group,
         "season": season,
         "sitCodes": "vl,vr",
     }
-    if window == "rolling30":
-        today = datetime.date.today()
-        start = today - datetime.timedelta(days=30)
-        params["startDate"] = start.strftime("%m/%d/%Y")
-        params["endDate"] = today.strftime("%m/%d/%Y")
 
     try:
         data = _get(f"/api/v1/people/{player_id}/stats", params=params)
@@ -230,12 +230,13 @@ def _fetch_splits(player_id: int, season: int, group: str, window: str) -> dict:
             code = (split.get("split") or {}).get("code", "")
             s = split.get("stat", {})
             entry = {
-                "pa": s.get("plateAppearances", 0),
+                # hitting: plateAppearances; pitching: battersFaced
+                "pa": s.get("plateAppearances") or s.get("battersFaced", 0),
                 "hits": s.get("hits", 0),
                 "hr": s.get("homeRuns", 0),
                 "tb": s.get("totalBases", 0),
                 "avg": _to_float(s.get("avg", ".000")),
-                "woba": _to_float(s.get("woba", 0.0)),
+                "ops": _to_float(s.get("ops", 0.0)),
                 "games": s.get("gamesPlayed", 0),
             }
             if code == "vl":
